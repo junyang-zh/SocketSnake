@@ -1,0 +1,11 @@
+[package]
+name = "socket_snake"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "socket_snake"
+path = "src/main.rs"
+
+[dependencies]
+crossterm = "*"
