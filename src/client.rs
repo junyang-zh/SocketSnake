@@ -7,8 +7,9 @@ use crate::yard::{ YardBuf, Direction };
 
 use crossterm::event::{ poll, read, Event, KeyCode };
 
+use std::thread;
 use std::time::Duration;
-use std::sync::mpsc::{ self, Sender, Receiver, TryRecvError };
+use std::sync::mpsc::{ Sender, Receiver, TryRecvError };
 
 pub fn start_and_play(
         buf_rx: Receiver<YardBuf>,
@@ -16,48 +17,50 @@ pub fn start_and_play(
         ctrl_tx: Sender<YardCtrl>,
     ) {
     let mut ui = render::TUIHelper::new();
-    ctrl_tx.send(YardCtrl::NewSnake);
+    ctrl_tx.send(YardCtrl::NewSnake).unwrap();
     let id;
     match info_rx.recv().unwrap() {
         YardInfo::RegisteredSnake(given_id) => { id = given_id.unwrap(); },
-        _ => { id = 0; panic!("Room may full") },
+        _ => { panic!("Room may full") },
     }
-    loop {
+    let _refresing_handle = thread::spawn(move || {
+        // receiving and printing buf
         loop {
+            thread::sleep(Duration::from_millis(10));
             match buf_rx.try_recv() {
                 Ok(buf) => {
                     ui.refresh_yard(buf).unwrap();
                 },
-                Err(TryRecvError::Empty) => { break; },
-                Err(TryRecvError::Disconnected) => panic!("Channel disconnected"),
+                Err(TryRecvError::Empty) => {},
+                Err(TryRecvError::Disconnected) => { return; },
             }
         }
-        /* still have bug
-        loop {
-            if poll(Duration::from_millis(10)).unwrap() {
-                match read().unwrap() {
-                    Event::Key(event) => {
-                        match event.code {
-                            KeyCode::Left => {
-                                ctrl_tx.send(YardCtrl::CtrlSnake(id, Direction::L));
-                            },
-                            KeyCode::Right => {
-                                ctrl_tx.send(YardCtrl::CtrlSnake(id, Direction::R));
-                            },
-                            KeyCode::Up => {
-                                ctrl_tx.send(YardCtrl::CtrlSnake(id, Direction::U));
-                            },
-                            KeyCode::Down => {
-                                ctrl_tx.send(YardCtrl::CtrlSnake(id, Direction::D));
-                            },
-                            KeyCode::Esc => { break; },
-                            _ => {},
-                        };
-                    },
-                    Event::Mouse(_event) => {},
-                    Event::Resize(_width, _height) => {},
-                }
+    });
+    loop {
+        // polling keyboard strike
+        if poll(Duration::from_millis(10)).unwrap() {
+            match read().unwrap() {
+                Event::Key(event) => {
+                    match event.code {
+                        KeyCode::Left => {
+                            ctrl_tx.send(YardCtrl::CtrlSnake(id, Direction::L)).unwrap();
+                        },
+                        KeyCode::Right => {
+                            ctrl_tx.send(YardCtrl::CtrlSnake(id, Direction::R)).unwrap();
+                        },
+                        KeyCode::Up => {
+                            ctrl_tx.send(YardCtrl::CtrlSnake(id, Direction::U)).unwrap();
+                        },
+                        KeyCode::Down => {
+                            ctrl_tx.send(YardCtrl::CtrlSnake(id, Direction::D)).unwrap();
+                        },
+                        KeyCode::Esc => { return; },
+                        _ => {},
+                    };
+                },
+                Event::Mouse(_event) => {},
+                Event::Resize(_width, _height) => {},
             }
-        }*/
+        }
     }
 }

@@ -237,7 +237,7 @@ impl YardSim {
     pub fn control_snake(&mut self, id: u8, d: Direction) -> Option<()> {
         match &mut self.snakes[id as usize] {
             Some(s) => {
-                if s.1 != d.opposite() {    // can't turn back
+                if d != s.1.opposite() {    // can't turn back
                     s.1 = d;
                 }
                 Some(())

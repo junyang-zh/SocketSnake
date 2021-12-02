@@ -4,7 +4,7 @@ use crate::yard::{ YardSim, YardBuf, Direction };
 
 use std::thread;
 use std::time::Duration;
-use std::sync::mpsc::{ self, Sender, Receiver, TryRecvError };
+use std::sync::mpsc::{ Sender, Receiver, TryRecvError };
 
 pub enum YardCtrl {
     NewSnake,
@@ -26,17 +26,18 @@ pub fn start_and_serve(
     buf_tx.send(y.generate_buf()).unwrap();
     loop {
         thread::sleep(Duration::from_millis(100));
+        // receiving control signals
         loop {
             match ctrl_rx.try_recv() {
                 Ok(YardCtrl::NewSnake) => {
-                    info_tx.send(YardInfo::RegisteredSnake(y.init_snake()));
+                    info_tx.send(YardInfo::RegisteredSnake(y.init_snake())).unwrap();
                 },
                 Ok(YardCtrl::CtrlSnake(id, d)) => {
-                    y.control_snake(id, d).unwrap();
+                    y.control_snake(id, d);
                 },
                 Err(TryRecvError::Empty) => { break; },
-                Err(TryRecvError::Disconnected) => panic!("Channel disconnected"),
-            }
+                Err(TryRecvError::Disconnected) => { return; },
+            };
         }
         y.next_tick();
         buf_tx.send(y.generate_buf()).unwrap();

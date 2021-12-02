@@ -4,7 +4,7 @@ pub mod server;
 pub mod client;
 
 use std::thread;
-use std::sync::mpsc::{ self, Sender, Receiver, TryRecvError };
+use std::sync::mpsc;
 
 fn main() {
     // server sends to clients
