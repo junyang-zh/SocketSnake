@@ -1,5 +1,5 @@
-mod yard;
-mod render;
+pub mod yard;
+pub mod render;
 
 fn main() {
     

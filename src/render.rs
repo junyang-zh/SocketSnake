@@ -1,42 +1,33 @@
-/// render: utils drawing the gameplay on the terminal
-pub mod render {
+/// pub mod render: utils drawing the gameplay on the terminal
 
-    use std::io::{stdout};
+pub use std::io::{stdout};
 
-    use crossterm::{
-        ExecutableCommand,
-        Result,
-        terminal::Clear,
-        style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
-    };
+pub use crossterm::{
+    ExecutableCommand, QueueableCommand, Result,
+    terminal::{Clear, ClearType}, cursor,
+    style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
+};
 
-    /// two character-wide basic blocks, which may appear in the game
-    pub const HEAD_L: &str  = ": ";
-    pub const HEAD_R: &str  = " :";
-    pub const HEAD_U: &str  = "''";
-    pub const HEAD_D: &str  = "..";
-    pub const BEAN: &str    = "()";
-    pub const FENCE: &str   = "[]";
-    pub struct TUIBlock {
-        fg : Color,
-        bg : Color,
-        content : &'static str,
-    }
+/// two character-wide basic TUI blocks, which may appear in the game
+pub const HEAD_L: &str  = ": ";
+pub const HEAD_R: &str  = " :";
+pub const HEAD_U: &str  = "''";
+pub const HEAD_D: &str  = "..";
+pub const BEAN: &str    = "()";
+pub const FENCE: &str   = "[]";
+pub const EMPTY: &str   = "  ";
+pub struct TUIBlock {
+    pub fg: Color,
+    pub bg: Color,
+    pub content: &'static str, // shall be anyone declared above
+}
 
-    // print a block after the curser
-    pub fn put_tui_block(block : &TUIBlock) -> Result<()> {
-        stdout()
-            .execute(SetForegroundColor(block.fg))?
-            .execute(SetBackgroundColor(block.bg))?
-            .execute(Print(block.content))?
-            .execute(ResetColor)?;
-        
-        Ok(())
-    }
-
-    #[test]
-    fn test_put() {
-        put_tui_block(&TUIBlock { fg: Color::White, bg: Color::Cyan, content: BEAN } ).unwrap();
-    }
-
+// print a block after the curser
+pub fn put_tui_block(block: &TUIBlock) -> Result<()> {
+    stdout()
+        .execute(SetForegroundColor(block.fg))?
+        .execute(SetBackgroundColor(block.bg))?
+        .execute(Print(block.content))?
+        .execute(ResetColor)?;
+    Ok(())
 }
