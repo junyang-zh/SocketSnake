@@ -3,33 +3,59 @@
 ///  - simulate the game
 ///  - produce the screen buffer
 
-pub use crossterm::style::Color;
 pub use crate::render::{
     HEAD_L, HEAD_R, HEAD_U, HEAD_D, BEAN, FENCE, EMPTY,
-    TUIBlock,
+    TUIBlock, YardBuf,
 };
+
 pub use std::collections::VecDeque;
+
+pub use crossterm::style::Color;
+use rand::prelude::*;
 
 /// coordinate on the field as (row, column)
 #[derive(Copy, Clone)]
 pub struct Coord(usize, usize);
 
+/// left, right, up, down
 #[derive(Copy, Clone)]
 pub enum Direction { L, R, U, D, }
+use Direction::{ L, R, U, D, };
+
+impl Direction {
+    /// find a next random value for Direction, can't turn back
+    pub fn next_random(self) -> Self {
+        match self {
+            L => [R, U, D],
+            R => [L, U, D],
+            U => [L, R, D],
+            D => [L, R, U],
+        }
+        .choose(&mut thread_rng())
+        .copied().unwrap()
+    }
+}
 
 impl Coord {
+    /// return the moved Coord and judge if within the (0,0)-bound rectangle
+    /// note: (column, row)
     pub fn move_toward(&self, d: Direction, bounds: Coord) -> Option<Coord> {
         match d {
-            Direction::L if self.1 > 0
+            L if self.1 > 0
                 => Some(Coord(self.0, self.1 - 1)),
-            Direction::R if self.1 + 1 < bounds.1
+            R if self.1 + 1 < bounds.1
                 => Some(Coord(self.0, self.1 + 1)),
-            Direction::U if self.0 > 0
+            U if self.0 > 0
                 => Some(Coord(self.0 - 1, self.1)),
-            Direction::D if self.0 + 1 < bounds.0
+            D if self.0 + 1 < bounds.0
                 => Some(Coord(self.0 + 1, self.1)),
             _ => None,
         }
+    }
+    /// call `bound.rand_inside()`, return a Coord inside the (0,0)-bound rectangle
+    pub fn rand_inside(&self) -> Coord {
+        let mut rng = thread_rng();
+        Coord(rng.gen_range(0..self.0), rng.gen_range(0..self.1))
     }
 }
 
@@ -90,26 +116,37 @@ pub struct Snake(VecDeque<Coord>, Direction);
 
 /// game simulator
 pub struct YardSim {
+    // configurations
     width: usize,
     height: usize,
-    tick: u64,
     bean_count: usize,
-    block_map: Vec<YardBlockType>,                  // without borders, thus with shape w * h
+    init_snake_len: usize,
+    // running status
+    tick: u64,
+    beans_left: usize,
+    block_map: Vec<Vec<YardBlockType>>,                  // without borders, thus with shape w * h
     snakes: [Option<Snake>; MAX_PLAYERS as usize],  // there can be player ids not registered
     score: [usize; MAX_PLAYERS as usize],
     failed: [bool; MAX_PLAYERS as usize],           // mark fail and clean up
     bonused: [usize; MAX_PLAYERS as usize],
 }
 
-/// the buffer that is sended to the clients
-pub type YardBuf = Vec<TUIBlock>;
 impl YardSim {
-    pub fn new(width: usize, height: usize, bean_count: usize) -> YardSim {
+    /// create a simulator
+    ///  - `width`: the columns count
+    ///  - `height`: the rows count
+    ///  - `bean_count`: the initial bean count, and it will hold forever
+    ///  - `init_snake_len`: the length of the snake, don't make it large, otherwise hurts perf
+    pub fn new(width: usize, height: usize, bean_count: usize, init_snake_len: usize) -> YardSim {
+        let mut block_map = Vec::<Vec<YardBlockType>>::new();
+        for _row in 0..height {
+            block_map.push(vec![Empty; width]);
+        }
         YardSim {
-            width, height,
+            width, height, bean_count, init_snake_len,
             tick: 0,
-            bean_count,
-            block_map: vec![Empty; width * height],
+            beans_left: 0,
+            block_map,
             /// [None; MAX_PLAYERS as usize] won't work well, so make it clumsy
             snakes: [None, None, None, None, None],
             score: [0; MAX_PLAYERS as usize],
@@ -122,22 +159,82 @@ impl YardSim {
     pub fn generate_buf(&self) -> YardBuf {
         let mut result_buf = YardBuf::new();
         for r in 0..self.height {
+            result_buf.push(Vec::<TUIBlock>::new());
             for c in 0..self.width {
-                result_buf.push(get_tui_block(&self.block_map[r * c]).unwrap());
+                result_buf[r].push(get_tui_block(&self.block_map[r][c]).unwrap());
             }
         }
         result_buf
     }
-    
+
+    /// tries hard to create a snake on the field, return a id
+    pub fn init_snake(&mut self) -> Option<u8> {
+        // find a id to assign
+        let mut i: u8 = 0;
+        let id = loop {
+                if i >= MAX_PLAYERS {
+                    break None;
+                }
+                match &self.snakes[i as usize] {
+                    Some(_s) => {},
+                    None => break Some(i),
+                }
+                i += 1;
+            };
+        if id == None {
+            return id;
+        }
+        // generate snake
+        let bound = Coord(self.height, self.width);
+        let mut segment: VecDeque<Coord>;
+        let mut d;
+        'choose_segment:
+        loop {
+            let mut tail = bound.rand_inside();
+            d = [L, R, U, D].choose(&mut thread_rng()).copied().unwrap();
+            segment = VecDeque::<Coord>::new();
+            segment.push_front(tail);
+            for _i in 1..self.init_snake_len {
+                match tail.move_toward(d, bound) {
+                    Some(c) => {
+                        segment.push_front(c);
+                        tail = c;
+                    },
+                    None => {
+                        continue 'choose_segment;
+                    },
+                }
+            }
+            // judge if intersect with others
+            for c in &segment {
+                match self.block_map[c.0][c.1] {
+                    Empty => continue,
+                    _ => continue 'choose_segment,
+                }
+            }
+            break; // finished nicely
+        }
+        // register snake
+        let head = segment.front().unwrap();
+        self.block_map[head.0][head.1] = Head(id.unwrap(), d);
+        let mut iter = segment.iter();
+        iter.next();
+        for c in iter {
+            self.block_map[c.0][c.1] = Body(id.unwrap());
+        }
+        self.snakes[id.unwrap() as usize] = Some(Snake(segment, d));
+        id
+    }
+
     pub fn control_snake(&mut self, id: u8, d: Direction) -> Option<()> {
-        match &self.snakes[id as usize] {
-            Some(s) => { s.1 = d; () },
+        match &mut self.snakes[id as usize] {
+            Some(s) => { s.1 = d; Some(()) },
             None => None,
         }
     }
 
-    pub fn get_score_of(&self) {
-
+    pub fn get_score_of(&self, id: u8) -> usize {
+        self.score[id as usize]
     }
 
     /// simulate the game:
@@ -147,24 +244,28 @@ impl YardSim {
         for id in 0..MAX_PLAYERS {
             match &mut self.snakes[id as usize] {
                 Some(s) => {
+                    let head = s.0.front().unwrap();
                     let new_head
-                        = match s.0.front().unwrap().move_toward(s.1, Coord(self.width, self.height)) {
+                        = match head.move_toward(s.1, Coord(self.height, self.width)) {
                             Some(pos) => pos,
                             None => {
                                 self.failed[id as usize] = true;
                                 continue;
                             },
                         };
+                    self.block_map[head.0][head.1] = Body(id);
                     s.0.push_front(new_head);
                     // going to one's retracting nail would fail, mark and cleanup strategy
-                    match &self.block_map[new_head.0 * new_head.1] {
+                    match &self.block_map[new_head.0][new_head.1] {
                         Empty => {              // go over and let tail retract
-                            self.block_map[new_head.0 * new_head.1] = Head(id, s.1);
-                            s.0.pop_back().unwrap();
+                            self.block_map[new_head.0][new_head.1] = Head(id, s.1);
+                            let tail = s.0.pop_back().unwrap();
+                            self.block_map[tail.0][tail.1] = Empty;
                         },
                         Bean => {               // go over extending head
-                            self.block_map[new_head.0 * new_head.1] = Head(id, s.1);
+                            self.block_map[new_head.0][new_head.1] = Head(id, s.1);
                             self.bonused[id as usize] += 1;
+                            self.beans_left -= 1;
                         },
                         Body(id_at) => {
                             self.failed[id as usize] = true;                 // mark this snake fail
@@ -191,6 +292,8 @@ impl YardSim {
     }
 
     /// cleanup after it ticks
+    ///  - clean up a failed snake
+    ///  - compensate ate beans
     pub fn cleanup(&mut self) {
         for id in 0..(MAX_PLAYERS as usize) {
             if self.bonused[id] > 0 {
@@ -200,12 +303,24 @@ impl YardSim {
             if self.failed[id] {
                 // clean up mess
                 for each_pos in &self.snakes[id].as_ref().unwrap().0 {
-                    self.block_map[each_pos.0 * each_pos.1] = Empty;
+                    self.block_map[each_pos.0][each_pos.1] = Empty;
                 }
                 // unregister a snake
                 self.snakes[id] = None;
                 self.failed[id] = false;
             }
+        }
+        while self.beans_left < self.bean_count {
+            let bound = Coord(self.height, self.width);
+            let loc = loop {
+                let c = bound.rand_inside();
+                match &self.block_map[c.0][c.1] {
+                    Empty => { break c; },
+                    _ => {},
+                };
+            };
+            self.block_map[loc.0][loc.1] = Bean;
+            self.beans_left += 1;
         }
     }
 }
