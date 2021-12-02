@@ -1,22 +1,26 @@
 pub mod yard;
 pub mod render;
+pub mod server;
+pub mod client;
 
 use std::thread;
-use std::time::Duration;
+use std::sync::mpsc::{ self, Sender, Receiver, TryRecvError };
 
 fn main() {
-    let handle = thread::spawn(|| {
-        let mut y = yard::YardSim::new(30, 20, 3, 3);
-        let mut ui = render::TUIHelper::new();
-        y.cleanup();
-        y.init_snake();
-        y.init_snake();
-        for _i in 0..20 {
-            thread::sleep(Duration::from_millis(100));
-            y.next_tick();
-            y.cleanup();
-            ui.refresh_yard(y.generate_buf()).unwrap();
-        }
+    // server sends to clients
+    let (buf_tx, buf_rx) = mpsc::channel();
+    let (info_tx, info_rx) = mpsc::channel();
+    // client sends to servers
+    let (ctrl_tx, ctrl_rx) = mpsc::channel();
+
+    let server_handle = thread::spawn(move || {
+        server::start_and_serve(buf_tx, info_tx, ctrl_rx);
     });
-    handle.join().unwrap();
+
+    let client_handle = thread::spawn(move || {
+        client::start_and_play(buf_rx, info_rx, ctrl_tx);
+    });
+
+    server_handle.join().unwrap(); // never join, never stop, till panics
+    client_handle.join().unwrap();
 }

@@ -32,7 +32,7 @@ pub fn put_tui_block(block: &TUIBlock) -> Result<()> {
     Ok(())
 }
 
-/// the buffer that is sended to the clients, width, height
+/// the buffer that is sended to the clients
 pub type YardBuf = Vec<Vec<TUIBlock>>;
 
 pub fn width(b: &YardBuf) -> usize {

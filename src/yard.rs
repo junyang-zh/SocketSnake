@@ -18,7 +18,7 @@ use rand::prelude::*;
 pub struct Coord(usize, usize);
 
 /// left, right, up, down
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, PartialEq)]
 pub enum Direction { L, R, U, D, }
 use Direction::{ L, R, U, D, };
 
@@ -33,6 +33,12 @@ impl Direction {
         }
         .choose(&mut thread_rng())
         .copied().unwrap()
+    }
+    /// returns the opposite direction, useful when judging valid moves
+    pub fn opposite(&self) -> Direction {
+        match *self {
+            L => R, R => L, U => D, D => U,
+        }
     }
 }
 
@@ -142,17 +148,19 @@ impl YardSim {
         for _row in 0..height {
             block_map.push(vec![Empty; width]);
         }
-        YardSim {
-            width, height, bean_count, init_snake_len,
-            tick: 0,
-            beans_left: 0,
-            block_map,
-            /// [None; MAX_PLAYERS as usize] won't work well, so make it clumsy
-            snakes: [None, None, None, None, None],
-            score: [0; MAX_PLAYERS as usize],
-            failed: [false; MAX_PLAYERS as usize],
-            bonused: [0; MAX_PLAYERS as usize],
-        }
+        let mut y = YardSim {
+                width, height, bean_count, init_snake_len,
+                tick: 0,
+                beans_left: 0,
+                block_map,
+                /// [None; MAX_PLAYERS as usize] won't work well, so make it clumsy
+                snakes: [None, None, None, None, None],
+                score: [0; MAX_PLAYERS as usize],
+                failed: [false; MAX_PLAYERS as usize],
+                bonused: [0; MAX_PLAYERS as usize],
+            };
+        y.fill_beans(); // tries to generate beans
+        y
     }
 
     /// generate a buffer for the client to print
@@ -228,7 +236,12 @@ impl YardSim {
 
     pub fn control_snake(&mut self, id: u8, d: Direction) -> Option<()> {
         match &mut self.snakes[id as usize] {
-            Some(s) => { s.1 = d; Some(()) },
+            Some(s) => {
+                if s.1 != d.opposite() {    // can't turn back
+                    s.1 = d;
+                }
+                Some(())
+            },
             None => None,
         }
     }
@@ -237,6 +250,41 @@ impl YardSim {
         self.score[id as usize]
     }
 
+    /// produce new beans on the ground till satisfied
+    pub fn fill_beans(&mut self) {
+        while self.beans_left < self.bean_count {
+            let bound = Coord(self.height, self.width);
+            let loc = loop {
+                let c = bound.rand_inside();
+                match &self.block_map[c.0][c.1] {
+                    Empty => { break c; },
+                    _ => {},
+                };
+            };
+            self.block_map[loc.0][loc.1] = Bean;
+            self.beans_left += 1;
+        }
+    }
+
+    /// clean up failed snakes, please do after ticks
+    pub fn cleanup(&mut self) {
+        for id in 0..(MAX_PLAYERS as usize) {
+            if self.bonused[id] > 0 {
+                self.score[id] += self.bonused[id];
+                self.bonused[id] = 0;
+            }
+            if self.failed[id] {
+                // clean up mess
+                for each_pos in &self.snakes[id].as_ref().unwrap().0 {
+                    self.block_map[each_pos.0][each_pos.1] = Empty;
+                }
+                // unregister a snake
+                self.snakes[id] = None;
+                self.failed[id] = false;
+            }
+        }
+    }
+    
     /// simulate the game:
     ///  - update each snake's position by its direction
     ///  - decide if gets point or fails
@@ -289,38 +337,7 @@ impl YardSim {
             }
         }
         self.tick += 1;
-    }
-
-    /// cleanup after it ticks
-    ///  - clean up a failed snake
-    ///  - compensate ate beans
-    pub fn cleanup(&mut self) {
-        for id in 0..(MAX_PLAYERS as usize) {
-            if self.bonused[id] > 0 {
-                self.score[id] += self.bonused[id];
-                self.bonused[id] = 0;
-            }
-            if self.failed[id] {
-                // clean up mess
-                for each_pos in &self.snakes[id].as_ref().unwrap().0 {
-                    self.block_map[each_pos.0][each_pos.1] = Empty;
-                }
-                // unregister a snake
-                self.snakes[id] = None;
-                self.failed[id] = false;
-            }
-        }
-        while self.beans_left < self.bean_count {
-            let bound = Coord(self.height, self.width);
-            let loc = loop {
-                let c = bound.rand_inside();
-                match &self.block_map[c.0][c.1] {
-                    Empty => { break c; },
-                    _ => {},
-                };
-            };
-            self.block_map[loc.0][loc.1] = Bean;
-            self.beans_left += 1;
-        }
+        self.cleanup();
+        self.fill_beans();
     }
 }
