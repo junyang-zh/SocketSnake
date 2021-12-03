@@ -42,7 +42,8 @@ pub fn show_main_menu() -> Result<UsersIdea> {
         .execute(Clear(ClearType::All))?
         .execute(cursor::MoveTo(0, 0))?
         .execute(Print(TITLE))?
-        .execute(Print(MENU_HINT))?;
+        .execute(Print(MENU_HINT))?
+        .execute(cursor::Show).unwrap();
     let mut line = String::new();
     stdin().read_line(&mut line).unwrap();
     let choice = loop {
@@ -51,6 +52,7 @@ pub fn show_main_menu() -> Result<UsersIdea> {
                 => { break num; },
             _ => {
                 println!("Please type in a number:");
+                line = String::new();
                 stdin().read_line(&mut line).unwrap();
             }
         }
