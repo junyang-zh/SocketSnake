@@ -3,7 +3,7 @@
 
 use crate::render;
 use crate::server::{ YardCtrl, YardInfo };
-use crate::yard::{ YardBuf, Direction };
+use crate::yard::Direction;
 
 use crossterm::event::{ poll, read, Event, KeyCode };
 
@@ -19,16 +19,16 @@ pub fn polling_keyboard(id: u8, ctrl_tx: Sender<YardCtrl>) {
             match read().unwrap() {
                 Event::Key(event) => {
                     match event.code {
-                        KeyCode::Left => {
+                        KeyCode::Left | KeyCode::Char('a') => {
                             ctrl_tx.send(YardCtrl::CtrlSnake(id, Direction::L)).unwrap();
                         },
-                        KeyCode::Right => {
+                        KeyCode::Right | KeyCode::Char('d') => {
                             ctrl_tx.send(YardCtrl::CtrlSnake(id, Direction::R)).unwrap();
                         },
-                        KeyCode::Up => {
+                        KeyCode::Up | KeyCode::Char('w') => {
                             ctrl_tx.send(YardCtrl::CtrlSnake(id, Direction::U)).unwrap();
                         },
-                        KeyCode::Down => {
+                        KeyCode::Down | KeyCode::Char('s') => {
                             ctrl_tx.send(YardCtrl::CtrlSnake(id, Direction::D)).unwrap();
                         },
                         KeyCode::Esc => { return; },
@@ -43,12 +43,15 @@ pub fn polling_keyboard(id: u8, ctrl_tx: Sender<YardCtrl>) {
 }
 
 /// checking if buffer is sended by the server, and print
-pub fn polling_buf(mut ui: render::TUIHelper, buf_rx: Receiver<YardBuf>) {
+pub fn polling_buf(mut ui: render::TUIHelper, info_rx: Receiver<YardInfo>) {
     loop {
         thread::sleep(Duration::from_millis(10));
-        match buf_rx.try_recv() {
-            Ok(buf) => {
-                ui.refresh_yard(buf).unwrap();
+        match info_rx.try_recv() {
+            Ok(info) => {
+                match info {
+                    YardInfo::RefreshScreen(buf) => { ui.refresh_yard(buf).unwrap(); },
+                    _ => {},
+                };
             },
             Err(TryRecvError::Empty) => {},
             Err(TryRecvError::Disconnected) => { return; },
@@ -58,19 +61,21 @@ pub fn polling_buf(mut ui: render::TUIHelper, buf_rx: Receiver<YardBuf>) {
 
 /// client main procedure
 pub fn start_and_play(
-        buf_rx: Receiver<YardBuf>,
         info_rx: Receiver<YardInfo>,
         ctrl_tx: Sender<YardCtrl>,
     ) {
     let ui = render::TUIHelper::new();
     ctrl_tx.send(YardCtrl::NewSnake).unwrap();
-    let id;
-    match info_rx.recv().unwrap() {
-        YardInfo::RegisteredSnake(given_id) => { id = given_id.unwrap(); },
-        _ => { panic!("Room may full") },
-    }
+    let id = loop {
+        match info_rx.recv().unwrap() {
+            YardInfo::RegisteredSnake(given_id) => {
+                break given_id.unwrap();
+            },
+            _ => {},
+        }
+    };
     let refresing_handle = thread::spawn(move || {
-        polling_buf(ui, buf_rx);
+        polling_buf(ui, info_rx);
     });
     let keyboard_handle = thread::spawn(move || {
         polling_keyboard(id, ctrl_tx);

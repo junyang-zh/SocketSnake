@@ -7,6 +7,7 @@ pub use crossterm::{
     cursor,
     style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
 };
+use serde::{Deserialize, Serialize};
 
 /// two character-wide basic TUI blocks, which may appear in the game
 pub const HEAD_L: &str  = ": ";
@@ -16,11 +17,11 @@ pub const HEAD_D: &str  = "..";
 pub const BEAN: &str    = "()";
 pub const FENCE: &str   = "[]";
 pub const EMPTY: &str   = "  ";
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct TUIBlock {
     pub fg: Color,
     pub bg: Color,
-    pub content: &'static str, // shall be anyone declared above
+    pub content: String, // shall be anyone declared above
 }
 
 // print a block after the curser
@@ -28,7 +29,7 @@ pub fn put_tui_block(block: &TUIBlock) -> Result<()> {
     stdout()
         .execute(SetForegroundColor(block.fg))?
         .execute(SetBackgroundColor(block.bg))?
-        .execute(Print(block.content))?
+        .execute(Print(&block.content))?
         .execute(ResetColor)?;
     Ok(())
 }
@@ -65,7 +66,7 @@ impl TUIHelper {
         stdout()
             .execute(Clear(ClearType::All))?
             .execute(cursor::MoveTo(0, 0))?;
-        let fence_block = TUIBlock { fg: Color::Black, bg: Color::Grey, content: FENCE };
+        let fence_block = TUIBlock { fg: Color::Black, bg: Color::Grey, content: FENCE.to_string() };
         for _i in 0..(width(&self.buf) + 2) {
             put_tui_block(&fence_block)?;
         }

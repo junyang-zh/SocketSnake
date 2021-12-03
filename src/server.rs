@@ -1,29 +1,35 @@
 /// pub mod server: have a fn that can be started as a thread
+/// simulates the game, shall be wrapped before the user
 
 use crate::yard::{ YardSim, YardBuf, Direction };
 
 use std::thread;
 use std::time::Duration;
 use std::sync::mpsc::{ Sender, Receiver, TryRecvError };
+use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize)]
 pub enum YardCtrl {
     NewSnake,
     CtrlSnake(u8, Direction),
 }
 
+#[derive(Serialize, Deserialize)]
 pub enum YardInfo {
+    RefreshScreen(YardBuf),
     RegisteredSnake(Option<u8>),
     Message(String),
 }
 
+/// simulating the yard in a seperate thread
+/// use channel to input/output control, info and buffer
 pub fn start_and_serve(
-        buf_tx: Sender<YardBuf>,
         info_tx: Sender<YardInfo>,
         ctrl_rx: Receiver<YardCtrl>,
     ) {
     // create a yard y and send the initial screen buffer
     let mut y = YardSim::new(30, 20, 5, 3);
-    buf_tx.send(y.generate_buf()).unwrap();
+    info_tx.send(YardInfo::RefreshScreen(y.generate_buf())).unwrap();
     loop {
         thread::sleep(Duration::from_millis(100));
         // receiving control signals
@@ -40,6 +46,6 @@ pub fn start_and_serve(
             };
         }
         y.next_tick();
-        buf_tx.send(y.generate_buf()).unwrap();
+        info_tx.send(YardInfo::RefreshScreen(y.generate_buf())).unwrap();
     }
 }

@@ -11,14 +11,15 @@ pub use crate::render::{
 pub use std::collections::VecDeque;
 
 pub use crossterm::style::Color;
+use serde::{Deserialize, Serialize};
 use rand::prelude::*;
 
 /// coordinate on the field as (row, column)
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Serialize, Deserialize)]
 pub struct Coord(usize, usize);
 
 /// left, right, up, down
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Direction { L, R, U, D, }
 use Direction::{ L, R, U, D, };
 
@@ -141,20 +142,20 @@ impl YardSim {
                         => Some(TUIBlock {
                             fg: Color::White,
                             bg: Color::White,
-                            content: EMPTY,
+                            content: EMPTY.to_string(),
                         }),
                     Bean
                         => Some(TUIBlock {
                             fg: Color::Yellow,
                             bg: Color::Green,
-                            content: BEAN,
+                            content: BEAN.to_string(),
                         }),
                     Body(id) if *id < MAX_PLAYERS
                         => Some(TUIBlock {
                             fg: Color::White,
                             bg: if self.stall_protect[*id as usize] & 1 > 0 { Color::White }
                                 else { PLAYER_COLOR_MAP[*id as usize] },
-                            content: EMPTY,
+                            content: EMPTY.to_string(),
                         }),
                     Head(id, d) if *id < MAX_PLAYERS
                         => Some(TUIBlock {
@@ -162,10 +163,10 @@ impl YardSim {
                             bg: if self.stall_protect[*id as usize] & 1 > 0 { Color::White }
                                 else { PLAYER_COLOR_MAP[*id as usize] },
                             content: match d {
-                                Direction::L => HEAD_L,
-                                Direction::R => HEAD_R,
-                                Direction::U => HEAD_U,
-                                Direction::D => HEAD_D,
+                                Direction::L => HEAD_L.to_string(),
+                                Direction::R => HEAD_R.to_string(),
+                                Direction::U => HEAD_U.to_string(),
+                                Direction::D => HEAD_D.to_string(),
                             },
                         }),
                     _ => None,
