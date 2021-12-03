@@ -3,7 +3,8 @@
 pub use std::io::{stdout};
 pub use crossterm::{
     ExecutableCommand, QueueableCommand, Result,
-    terminal::{Clear, ClearType}, cursor,
+    terminal::{Clear, ClearType},
+    cursor,
     style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
 };
 
@@ -29,6 +30,13 @@ pub fn put_tui_block(block: &TUIBlock) -> Result<()> {
         .execute(SetBackgroundColor(block.bg))?
         .execute(Print(block.content))?
         .execute(ResetColor)?;
+    Ok(())
+}
+
+pub fn clear_screen_and_go_back() -> Result<()> {
+    stdout()
+        .execute(Clear(ClearType::All))?
+        .execute(cursor::MoveTo(0, 0))?;
     Ok(())
 }
 
@@ -83,18 +91,30 @@ impl TUIHelper {
             self.is_init = true;
             return self.print_yard();
         }
+        stdout().execute(cursor::Hide).unwrap();
         for r in 0..height(&self.buf) {
             for c in 0..width(&self.buf) {
                 if self.buf[r][c] != nbuf[r][c] {
-                    stdout().execute(cursor::MoveTo(
-                        (c * 2 + 2).try_into().unwrap(),
-                        (r + 1).try_into().unwrap(),
-                    ))?;
+                    stdout()
+                        .execute(cursor::MoveTo(
+                            (c * 2 + 2).try_into().unwrap(),
+                            (r + 1).try_into().unwrap(),
+                        ))?;
                     put_tui_block(&nbuf[r][c])?;
                 }
             }
         }
         self.buf = nbuf;
+        Ok(())
+    }
+
+    pub fn print_info(&mut self, info: &str) -> Result<()> {
+        stdout()
+            .execute(cursor::MoveTo(
+                0,
+                (height(&self.buf) + 2).try_into().unwrap(),
+            ))?
+            .execute(Print(info))?;
         Ok(())
     }
 }

@@ -23,4 +23,6 @@ fn main() {
 
     server_handle.join().unwrap(); // never join, never stop, till panics
     client_handle.join().unwrap();
+    // say goodbye
+    
 }

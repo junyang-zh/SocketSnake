@@ -82,41 +82,6 @@ use YardBlockType::{ Empty, Bean, Body, Head };
 pub const PLAYER_COLOR_MAP: [Color; MAX_PLAYERS as usize]
     = [Color::DarkGrey, Color::DarkRed, Color::DarkBlue, Color::DarkMagenta, Color::DarkCyan];
 
-pub fn get_tui_block(b: &YardBlockType) -> Option<TUIBlock> {
-    match b {
-        Empty
-            => Some(TUIBlock {
-                fg: Color::White,
-                bg: Color::White,
-                content: EMPTY,
-            }),
-        Bean
-            => Some(TUIBlock {
-                fg: Color::Yellow,
-                bg: Color::Green,
-                content: BEAN,
-            }),
-        Body(id) if *id < MAX_PLAYERS
-            => Some(TUIBlock {
-                fg: Color::White,
-                bg: PLAYER_COLOR_MAP[*id as usize],
-                content: EMPTY,
-            }),
-        Head(id, d) if *id < MAX_PLAYERS
-            => Some(TUIBlock {
-                fg: Color::White,
-                bg: PLAYER_COLOR_MAP[*id as usize],
-                content: match d {
-                    Direction::L => HEAD_L,
-                    Direction::R => HEAD_R,
-                    Direction::U => HEAD_U,
-                    Direction::D => HEAD_D,
-                },
-            }),
-        _ => None,
-    }
-}
-
 /// snakes which have a head and direction, the head is the front element
 pub struct Snake(VecDeque<Coord>, Direction);
 
@@ -130,8 +95,9 @@ pub struct YardSim {
     // running status
     tick: u64,
     beans_left: usize,
-    block_map: Vec<Vec<YardBlockType>>,                  // without borders, thus with shape w * h
+    block_map: Vec<Vec<YardBlockType>>,             // without borders, thus with shape w * h
     snakes: [Option<Snake>; MAX_PLAYERS as usize],  // there can be player ids not registered
+    stall_protect: [u64; MAX_PLAYERS as usize],     // newborns shall have some ticks to stall
     score: [usize; MAX_PLAYERS as usize],
     failed: [bool; MAX_PLAYERS as usize],           // mark fail and clean up
     bonused: [usize; MAX_PLAYERS as usize],
@@ -155,6 +121,7 @@ impl YardSim {
                 block_map,
                 /// [None; MAX_PLAYERS as usize] won't work well, so make it clumsy
                 snakes: [None, None, None, None, None],
+                stall_protect: [0; MAX_PLAYERS as usize],
                 score: [0; MAX_PLAYERS as usize],
                 failed: [false; MAX_PLAYERS as usize],
                 bonused: [0; MAX_PLAYERS as usize],
@@ -169,7 +136,41 @@ impl YardSim {
         for r in 0..self.height {
             result_buf.push(Vec::<TUIBlock>::new());
             for c in 0..self.width {
-                result_buf[r].push(get_tui_block(&self.block_map[r][c]).unwrap());
+                let block = match &self.block_map[r][c] {
+                    Empty
+                        => Some(TUIBlock {
+                            fg: Color::White,
+                            bg: Color::White,
+                            content: EMPTY,
+                        }),
+                    Bean
+                        => Some(TUIBlock {
+                            fg: Color::Yellow,
+                            bg: Color::Green,
+                            content: BEAN,
+                        }),
+                    Body(id) if *id < MAX_PLAYERS
+                        => Some(TUIBlock {
+                            fg: Color::White,
+                            bg: if self.stall_protect[*id as usize] & 1 > 0 { Color::White }
+                                else { PLAYER_COLOR_MAP[*id as usize] },
+                            content: EMPTY,
+                        }),
+                    Head(id, d) if *id < MAX_PLAYERS
+                        => Some(TUIBlock {
+                            fg: Color::White,
+                            bg: if self.stall_protect[*id as usize] & 1 > 0 { Color::White }
+                                else { PLAYER_COLOR_MAP[*id as usize] },
+                            content: match d {
+                                Direction::L => HEAD_L,
+                                Direction::R => HEAD_R,
+                                Direction::U => HEAD_U,
+                                Direction::D => HEAD_D,
+                            },
+                        }),
+                    _ => None,
+                };
+                result_buf[r].push(block.unwrap());
             }
         }
         result_buf
@@ -231,15 +232,23 @@ impl YardSim {
             self.block_map[c.0][c.1] = Body(id.unwrap());
         }
         self.snakes[id.unwrap() as usize] = Some(Snake(segment, d));
+        self.stall_protect[id.unwrap() as usize] = 10; // set protection to 10 ticks
         id
     }
 
     pub fn control_snake(&mut self, id: u8, d: Direction) -> Option<()> {
         match &mut self.snakes[id as usize] {
             Some(s) => {
-                if d != s.1.opposite() {    // can't turn back
-                    s.1 = d;
-                }
+                let head = s.0.front().unwrap();
+                // can't turn back, regarding the state before ticking
+                match self.block_map[head.0][head.1] {
+                    Head(bid, cur_dir) => {
+                        if bid == id && d != cur_dir.opposite() {
+                            s.1 = d;
+                        }
+                    },
+                    _ => {},
+                };
                 Some(())
             },
             None => None,
@@ -290,6 +299,11 @@ impl YardSim {
     ///  - decide if gets point or fails
     pub fn next_tick(&mut self) {
         for id in 0..MAX_PLAYERS {
+            // handle newborn protection
+            if self.stall_protect[id as usize] > 0 {
+                self.stall_protect[id as usize] -= 1;
+                continue;
+            }
             match &mut self.snakes[id as usize] {
                 Some(s) => {
                     let head = s.0.front().unwrap();
