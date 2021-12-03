@@ -2,11 +2,12 @@ pub mod yard;
 pub mod render;
 pub mod server;
 pub mod client;
+pub mod snakeux;
 
 use std::thread;
 use std::sync::mpsc;
 
-fn main() {
+fn singleplayer_start() {
     // server sends to clients
     let (buf_tx, buf_rx) = mpsc::channel();
     let (info_tx, info_rx) = mpsc::channel();
@@ -23,6 +24,20 @@ fn main() {
 
     server_handle.join().unwrap(); // never join, never stop, till panics
     client_handle.join().unwrap();
-    // say goodbye
-    
+}
+
+fn main() {
+    loop {
+        let choice = snakeux::show_main_menu().unwrap();
+        match choice {
+            snakeux::UsersIdea::Singleplayer
+                => { singleplayer_start(); },
+            snakeux::UsersIdea::JoinGame(addr)
+                => { drop(addr); },
+            snakeux::UsersIdea::HostGame
+                => {},
+            snakeux::UsersIdea::ExitGame
+                => { break; }
+        }
+    }
 }
