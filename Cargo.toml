@@ -13,3 +13,4 @@ rand = "*"
 # latest serde has some problems with enum Color 
 serde = { version = "1.0.118", features = ["derive"] }
 serde_yaml = "*"
+local_ipaddress = "*"

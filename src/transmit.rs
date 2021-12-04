@@ -1,4 +1,5 @@
-/// pub mod transmit: wrapped TCP and UDP scaffolds, send serialized and recv parsed
+/// pub mod transmit:
+/// wrapped TCP and UDP scaffolds, send serialized and recv parsed
 
 use serde_yaml;
 use serde::{Deserialize, Serialize};

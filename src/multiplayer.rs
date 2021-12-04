@@ -10,7 +10,7 @@ use std::thread;
 use std::sync::mpsc::{ self, TryRecvError };
 use std::net::{ Shutdown, TcpListener, TcpStream, UdpSocket, Ipv4Addr };
 
-pub const TCP_SERVER_PORT: &str = "127.0.0.1:14514";
+pub const TCP_SERVER_PORT: &str = ":14514";
 pub const UDP_SERVER_PORT: &str = "0.0.0.0:19198";
 pub const UDP_CLIENT_PORT: &str = "0.0.0.0:10114";
 // multicast group can be from 234.0.2.0 to 238.255.255.255
@@ -62,7 +62,7 @@ pub fn handle_connection(ctrl_tx: mpsc::Sender<YardCtrl>, mut stream: TcpStream)
     });
 }
 
-pub fn server_start() -> std::io::Result<()> {
+pub fn server_start(server_addr: String) -> std::io::Result<()> {
     // server sends to clients
     let (info_tx, info_rx) = mpsc::channel();
     // client sends to servers
@@ -92,7 +92,7 @@ pub fn server_start() -> std::io::Result<()> {
     });
 
     // communicate through TCP
-    let listener = TcpListener::bind(TCP_SERVER_PORT)?;
+    let listener = TcpListener::bind(&server_addr)?;
     println!("Listening");
     // server wrapper listens for connection and send through channel
     loop {

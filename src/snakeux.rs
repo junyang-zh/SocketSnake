@@ -13,6 +13,7 @@ pub use crossterm::{
     cursor,
     style::{Color, Print, ResetColor, SetBackgroundColor, SetForegroundColor},
 };
+use local_ipaddress;
 
 pub const TITLE: &str = r#"
  ____   __    ___  __ _  ____  ____    ____  __ _   __   __ _  ____ 
@@ -59,8 +60,8 @@ pub const DEFAULT_NAMES: [&str; 9] = [
 
 pub enum UsersIdea {
     Singleplayer,
-    JoinGame(String),
-    HostGame,
+    JoinGame(String),   // join or host by binding ip
+    HostGame(String),
     ChangeName,
     ExitGame,
 }
@@ -127,15 +128,17 @@ pub fn show_main_menu(name: &mut String) -> Result<UsersIdea> {
             Ok(UsersIdea::JoinGame(addr))
         },
         3 => {
+            let mut server_local_ip = local_ipaddress::get().unwrap();
+            server_local_ip.push_str(multiplayer::TCP_SERVER_PORT);
             stdout()
                 .execute(Clear(ClearType::All))?
                 .execute(cursor::MoveTo(0, 0))?
                 .execute(Print(TITLE))?
                 .execute(Print(HOST_HINT))?
-                .execute(Print(multiplayer::TCP_SERVER_PORT))?
+                .execute(Print(&server_local_ip))?
                 .execute(Print(SEPERATOR))?
                 .execute(cursor::Show).unwrap();
-            Ok(UsersIdea::HostGame)
+            Ok(UsersIdea::HostGame(server_local_ip))
         },
         4 => {
             println!("Please enter your name:");
