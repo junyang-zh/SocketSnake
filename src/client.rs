@@ -16,7 +16,7 @@ use std::sync::mpsc::{ Sender, Receiver, TryRecvError };
 /// id: client id, ctrl_tx: control signal channel
 pub fn polling_keyboard(id: u64, ctrl_tx: Sender<YardCtrl>) {
     loop {
-        if poll(Duration::from_millis(10)).unwrap() {
+        if poll(Duration::from_millis(10)).unwrap_or_else(|e| { println!("Err {}", e); false }) {
             match read().unwrap() {
                 Event::Key(event) => {
                     match event.code {
@@ -46,7 +46,6 @@ pub fn polling_keyboard(id: u64, ctrl_tx: Sender<YardCtrl>) {
 /// checking if buffer is sended by the server, and print
 pub fn polling_buf(id: u64, mut ui: render::TUIHelper, info_rx: Receiver<YardInfo>) {
     loop {
-        thread::sleep(Duration::from_millis(10));
         match info_rx.try_recv() {
             Ok(info) => {
                 match info {
@@ -54,7 +53,7 @@ pub fn polling_buf(id: u64, mut ui: render::TUIHelper, info_rx: Receiver<YardInf
                         ui.refresh_yard(buf).unwrap();
                     },
                     YardInfo::Board(s) => {
-                        ui.print_info(&s).unwrap();
+                        ui.print_board(&s).unwrap();
                     },
                     YardInfo::Failed(fid) => {
                         if fid == id {

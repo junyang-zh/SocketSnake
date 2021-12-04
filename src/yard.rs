@@ -15,11 +15,11 @@ use serde::{Deserialize, Serialize};
 use rand::prelude::*;
 
 /// coordinate on the field as (row, column)
-#[derive(Copy, Clone, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, Serialize, Deserialize)]
 pub struct Coord(usize, usize);
 
 /// left, right, up, down
-#[derive(Copy, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum Direction { L, R, U, D, }
 use Direction::{ L, R, U, D, };
 

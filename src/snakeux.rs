@@ -1,5 +1,7 @@
 /// pub mod snakeux: user experience before and after actual game rendering
 
+use crate::multiplayer;
+
 use std::io::{ stdin, stdout, Error, ErrorKind };
 use std::net::Ipv4Addr;
 
@@ -36,7 +38,9 @@ Please type in your option:
 
 pub const HOST_HINT: &str = r#"
 --------------------------------------------------------------------
- Socket Snake host is running on LocalHost:41919 (127.0.0.1:41919)
+     Socket Snake host is running on LocalHost "#;
+pub const SEPERATOR: &str = r#"
+                   Press Ctrl+C to End serving
 --------------------------------------------------------------------
 "#;
 
@@ -128,6 +132,8 @@ pub fn show_main_menu(name: &mut String) -> Result<UsersIdea> {
                 .execute(cursor::MoveTo(0, 0))?
                 .execute(Print(TITLE))?
                 .execute(Print(HOST_HINT))?
+                .execute(Print(multiplayer::TCP_SERVER_PORT))?
+                .execute(Print(SEPERATOR))?
                 .execute(cursor::Show).unwrap();
             Ok(UsersIdea::HostGame)
         },

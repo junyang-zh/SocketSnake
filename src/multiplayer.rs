@@ -3,17 +3,19 @@
 
 use crate::{ server, client };
 use crate::server::{ YardCtrl, YardInfo };
-
-use serde_yaml;
+use crate::transmit::*;
+use crate::{ tcp_recv, udp_recv };
 
 use std::thread;
-use std::io::{ Read, Write };
-use std::sync::mpsc;
+use std::sync::mpsc::{ self, TryRecvError };
 use std::net::{ Shutdown, TcpListener, TcpStream, UdpSocket, Ipv4Addr };
 
+pub const TCP_SERVER_PORT: &str = "127.0.0.1:14514";
+pub const UDP_SERVER_PORT: &str = "0.0.0.0:19198";
+pub const UDP_CLIENT_PORT: &str = "0.0.0.0:10114";
 // multicast group can be from 234.0.2.0 to 238.255.255.255
-const MULTICAST_GROUP: &str = "234.51.4.19:19810";
-const MULTICAST_GROUP_ADDR: &Ipv4Addr = &Ipv4Addr::new(234, 51, 4, 19);
+pub const MULTICAST_GROUP_PORT: &str = "234.51.4.19:10114";
+pub const MULTICAST_GROUP_ADDR: &Ipv4Addr = &Ipv4Addr::new(234, 51, 4, 19);
 
 pub fn singleplayer_start(name: String) {
     // server sends to clients
@@ -34,22 +36,29 @@ pub fn singleplayer_start(name: String) {
 }
 
 pub fn handle_connection(ctrl_tx: mpsc::Sender<YardCtrl>, mut stream: TcpStream) {
+    println!("Connected one client, establishing UDP connection");
+    // send the multicast group for the client to join
+    tcp_send(&mut stream, MULTICAST_GROUP_ADDR).unwrap();
     thread::spawn(move || {
         loop {
-            let mut buffer = [0; 1024];
-            let len = match stream.read(&mut buffer) {
-                    Ok(n) => n,
-                    Err(_) => { break; },
-                };
-            if len == 0 {
-                continue;
-            }
-            let serialized: String = std::str::from_utf8(&buffer[0..len]).unwrap().to_string();
-            let op: YardCtrl = serde_yaml::from_str(&serialized).unwrap();
-            ctrl_tx.send(op).unwrap();
-            println!("Request handled: {:?}", &serialized);
+            let op: YardCtrl = match tcp_recv!(stream) {
+                Ok(c) => { c },
+                Err(e) => {
+                    println!("Receiving failed {}", e);
+                    break;
+                },
+            };
+            match ctrl_tx.send(op.clone()) {
+                Ok(_) => {
+                    println!("Request handled: {:?}", op);
+                },
+                Err(_) => {
+                    println!("Server quitted, ending TCP connection");
+                    stream.shutdown(Shutdown::Both).expect("shutdown call failed");
+                    break;
+                }
+            };
         }
-        stream.shutdown(Shutdown::Both).expect("shutdown call failed");
     });
 }
 
@@ -63,9 +72,27 @@ pub fn server_start() -> std::io::Result<()> {
         server::start_and_serve(info_tx, ctrl_rx);
     });
 
-    /// TODO
+    // info from server (info_rx) always sent to UDP multicast
+    let socket = UdpSocket::bind(UDP_SERVER_PORT).unwrap();
+    thread::spawn(move || {
+        loop {
+            let info = match info_rx.recv() {
+                Ok(c) => c,
+                Err(_e) => break, // client quitted
+            };
+            udp_send(&socket, MULTICAST_GROUP_PORT, &info).unwrap();
+            // printing information
+            match info {
+                YardInfo::RegisteredSnake(_, _) | YardInfo::Failed(_) => {
+                    println!("Sent signal {:?}", info);
+                },
+                _ => {},
+            }
+        }
+    });
+
     // communicate through TCP
-    let listener = TcpListener::bind("127.0.0.1:41919")?;
+    let listener = TcpListener::bind(TCP_SERVER_PORT)?;
     println!("Listening");
     // server wrapper listens for connection and send through channel
     loop {
@@ -75,7 +102,6 @@ pub fn server_start() -> std::io::Result<()> {
                     // spawn a child that sends ctrl to the backend
                     let ctrl_tx_clone = mpsc::Sender::clone(&ctrl_tx);
                     handle_connection(ctrl_tx_clone, stream);
-                    println!("Connected one client");
                 },
                 Err(_e) => {},
             }
@@ -88,27 +114,6 @@ pub fn client_start(name: String, server_addr: String) {
     let (info_tx, info_rx) = mpsc::channel();
     // client sends to servers
     let (ctrl_tx, ctrl_rx) = mpsc::channel();
-    
-    let _client_handle = thread::spawn(move || {
-        client::start_and_play(name, info_rx, ctrl_tx);
-    });
-
-    // receiving info (as well as screen buffer) through UDP
-    let socket = UdpSocket::bind(MULTICAST_GROUP).unwrap();
-    socket.join_multicast_v4(&MULTICAST_GROUP_ADDR, &Ipv4Addr::UNSPECIFIED)
-        .expect("Couldn't join multicast");
-    thread::spawn(move || {
-        loop {
-            let mut buffer = [0u8; 65535];
-            socket.recv_from(&mut buffer).unwrap();
-            let deserialized = String::from_utf8_lossy(&buffer[..]);
-            let server_info: YardInfo = match serde_yaml::from_str(&deserialized) {
-                    Ok(info) => info,
-                    Err(_e) => continue,
-                };
-            info_tx.send(server_info).unwrap();
-        }
-    });
 
     // sending ctrl signal using TCP
     println!("Connecting to {} ...", &server_addr);
@@ -118,18 +123,62 @@ pub fn client_start(name: String, server_addr: String) {
             Err(e) => { println!("{}, retrying ...", e); },
         };
     };
-    thread::spawn(move || {
-        let ctrl_rx_moved = ctrl_rx;
+
+    // when TCP connected, use TCP to receive a multicast group
+    let group_addr: Ipv4Addr = tcp_recv!(stream).unwrap();
+    // start listening UDP for buffer and information
+    let socket = UdpSocket::bind(UDP_CLIENT_PORT).unwrap();
+    socket.join_multicast_v4(&group_addr, &Ipv4Addr::UNSPECIFIED)
+        .expect("Couldn't join multicast");
+
+    // UDP listening thread, use channel to notify an end of service
+    let (listener_kill, listener_killed) = mpsc::channel::<bool>();
+    let listening_handle = thread::spawn(move || {
         loop {
-            let serialized = match ctrl_rx_moved.recv() {
-                Ok(ctrl) => match serde_yaml::to_string(&ctrl) {
-                        Ok(s) => s,
-                        Err(_e) => continue,
-                    },
-                Err(_e) => break,
+            // child control
+            match listener_killed.try_recv() {
+                Ok(_) => { return; },
+                Err(TryRecvError::Empty) => {},
+                Err(TryRecvError::Disconnected) => { return; },
+            }
+            // doing work
+            let server_info: YardInfo = match udp_recv!(&socket) {
+                Ok(i) => { i }, // be silent to users
+                Err(_) => { break; }, // client quitted
             };
-            stream.write(serialized.as_bytes()).unwrap();
-            stream.flush().unwrap();
+            match info_tx.send(server_info) {
+                Ok(_) => {}, // be silent to users
+                Err(_) => { break; }, // client quitted
+            };
         }
     });
+
+    // TCP sending thread
+    let (sender_kill, sender_killed) = mpsc::channel::<bool>();
+    let sending_handle = thread::spawn(move || {
+        loop {
+            // child control
+            match sender_killed.try_recv() {
+                Ok(_) => { break; },
+                Err(TryRecvError::Empty) => {},
+                Err(TryRecvError::Disconnected) => { break; },
+            }
+            // doing work
+            let ctrl = match ctrl_rx.recv() {
+                Ok(c) => c,
+                Err(_e) => break, // client quitted
+            };
+            tcp_send(&mut stream, &ctrl).unwrap();
+        }
+        // shutdown TCP connection
+        stream.shutdown(Shutdown::Both).expect("Shutdown TCP connection failed");
+    });
+
+    client::start_and_play(name, info_rx, ctrl_tx); // note: will not return till end
+
+    // if user ended playing, clean up the threads by just dropping the channel
+    drop(listener_kill);
+    drop(sender_kill);
+    listening_handle.join().unwrap();
+    sending_handle.join().unwrap();
 }

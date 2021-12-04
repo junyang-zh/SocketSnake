@@ -4,6 +4,8 @@ pub mod server;
 pub mod client;
 pub mod snakeux;
 pub mod multiplayer;
+#[macro_use]
+pub mod transmit;
 
 fn main() {
     let mut name = snakeux::random_name(); // will be used next time, be sure to clone

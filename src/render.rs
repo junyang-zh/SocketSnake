@@ -1,5 +1,7 @@
 /// pub mod render: utils drawing the gameplay on the terminal
 
+use crate::server::BoardType;
+
 pub use std::io::{stdout};
 pub use crossterm::{
     ExecutableCommand, QueueableCommand, Result,
@@ -17,7 +19,7 @@ pub const HEAD_D: &str  = "..";
 pub const BEAN: &str    = "()";
 pub const FENCE: &str   = "[]";
 pub const EMPTY: &str   = "  ";
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TUIBlock {
     pub fg: Color,
     pub bg: Color,
@@ -117,6 +119,24 @@ impl TUIHelper {
             ))?
             .execute(Clear(ClearType::FromCursorDown))?
             .execute(Print(info))?;
+        Ok(())
+    }
+
+    pub fn print_board(&mut self, board: &BoardType) -> Result<()> {
+        stdout()
+            .execute(cursor::MoveTo(
+                0,
+                (height(&self.buf) + 2).try_into().unwrap(),
+            ))?
+            .execute(Clear(ClearType::FromCursorDown))?
+            .execute(Print("Board\n"))?;
+        for line in board {
+            stdout()
+                .execute(SetForegroundColor(Color::White))?
+                .execute(SetBackgroundColor(line.0))?
+                .execute(Print(&line.1))?
+                .execute(ResetColor)?;
+        }
         Ok(())
     }
 }
