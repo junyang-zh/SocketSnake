@@ -233,6 +233,7 @@ impl YardSim {
             self.block_map[c.0][c.1] = Body(id.unwrap());
         }
         self.snakes[id.unwrap() as usize] = Some(Snake(segment, d));
+        self.score[id.unwrap() as usize] = self.init_snake_len;
         self.stall_protect[id.unwrap() as usize] = 10; // set protection to 10 ticks
         id
     }
@@ -256,11 +257,7 @@ impl YardSim {
         }
     }
 
-    pub fn get_score_of(&self, id: u8) -> usize {
-        self.score[id as usize]
-    }
-
-    /// produce new beans on the ground till satisfied
+    /// produce new beans on the ground till satisfied, please do after ticks
     pub fn fill_beans(&mut self) {
         while self.beans_left < self.bean_count {
             let bound = Coord(self.height, self.width);
@@ -289,6 +286,7 @@ impl YardSim {
                     self.block_map[each_pos.0][each_pos.1] = Empty;
                 }
                 // unregister a snake
+                self.score[id] = 0;
                 self.snakes[id] = None;
                 self.failed[id] = false;
             }
@@ -298,7 +296,7 @@ impl YardSim {
     /// simulate the game:
     ///  - update each snake's position by its direction
     ///  - decide if gets point or fails
-    pub fn next_tick(&mut self) {
+    pub fn next_tick(&mut self) -> ([usize; MAX_PLAYERS as usize], [bool; MAX_PLAYERS as usize]) {
         for id in 0..MAX_PLAYERS {
             // handle newborn protection
             if self.stall_protect[id as usize] > 0 {
@@ -352,7 +350,9 @@ impl YardSim {
             }
         }
         self.tick += 1;
+        let (score, failed) = (self.score.clone(), self.failed.clone());
         self.cleanup();
         self.fill_beans();
+        (score, failed)
     }
 }

@@ -15,7 +15,7 @@ use std::net::{ Shutdown, TcpListener, TcpStream, UdpSocket, Ipv4Addr };
 const MULTICAST_GROUP: &str = "234.51.4.19:19810";
 const MULTICAST_GROUP_ADDR: &Ipv4Addr = &Ipv4Addr::new(234, 51, 4, 19);
 
-pub fn singleplayer_start() {
+pub fn singleplayer_start(name: String) {
     // server sends to clients
     let (info_tx, info_rx) = mpsc::channel();
     // client sends to servers
@@ -26,11 +26,11 @@ pub fn singleplayer_start() {
     });
 
     let client_handle = thread::spawn(move || {
-        client::start_and_play(info_rx, ctrl_tx);
+        client::start_and_play(name, info_rx, ctrl_tx);
     });
 
-    server_handle.join().unwrap(); // never join, never stop, till panics
-    client_handle.join().unwrap();
+    server_handle.join().unwrap_or(()); // Ok to SendError, client exits
+    client_handle.join().unwrap();      // Not Ok to quit badly
 }
 
 pub fn handle_connection(ctrl_tx: mpsc::Sender<YardCtrl>, mut stream: TcpStream) {
@@ -41,7 +41,7 @@ pub fn handle_connection(ctrl_tx: mpsc::Sender<YardCtrl>, mut stream: TcpStream)
                     Ok(n) => n,
                     Err(_) => { break; },
                 };
-            if (len == 0) {
+            if len == 0 {
                 continue;
             }
             let serialized: String = std::str::from_utf8(&buffer[0..len]).unwrap().to_string();
@@ -83,14 +83,14 @@ pub fn server_start() -> std::io::Result<()> {
     }
 }
 
-pub fn client_start(server_addr: String) {
+pub fn client_start(name: String, server_addr: String) {
     // server sends to clients
     let (info_tx, info_rx) = mpsc::channel();
     // client sends to servers
     let (ctrl_tx, ctrl_rx) = mpsc::channel();
     
     let _client_handle = thread::spawn(move || {
-        client::start_and_play(info_rx, ctrl_tx);
+        client::start_and_play(name, info_rx, ctrl_tx);
     });
 
     // receiving info (as well as screen buffer) through UDP

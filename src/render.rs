@@ -115,6 +115,7 @@ impl TUIHelper {
                 0,
                 (height(&self.buf) + 2).try_into().unwrap(),
             ))?
+            .execute(Clear(ClearType::FromCursorDown))?
             .execute(Print(info))?;
         Ok(())
     }

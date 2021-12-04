@@ -3,6 +3,8 @@
 use std::io::{ stdin, stdout, Error, ErrorKind };
 use std::net::Ipv4Addr;
 
+use rand::{ thread_rng, Rng };
+use rand::prelude::SliceRandom;
 pub use crossterm::{
     ExecutableCommand, QueueableCommand, Result,
     terminal::{Clear, ClearType},
@@ -17,13 +19,17 @@ pub const TITLE: &str = r#"
 (____/ \__/  \___)(__\_)(____) (__)   (____/\_)__)\_/\_/(__\_)(____)
 "#;
 
-pub const MENU_HINT: &str = r#"
+pub const GREETING: &str = r#"
 --------------------------------------------------------------------
+                    Hi! "#;
+
+pub const MENU_HINT: &str = r#"
                     Welcome To Socket Snake!
                     (1) Start singleplayer game
                     (2) Join a hosted game
                     (3) Host a game
-                    (4) Exit
+                    (4) Change your name
+                    (5) Exit
 --------------------------------------------------------------------
 Please type in your option:
 "#;
@@ -34,12 +40,24 @@ pub const HOST_HINT: &str = r#"
 --------------------------------------------------------------------
 "#;
 
-pub const CHOICE_RANGE: std::ops::Range::<u8> = 1..5;
+pub const CHOICE_RANGE: std::ops::Range::<u8> = 1..6;
+pub const DEFAULT_NAMES: [&str; 9] = [
+        "Happy Pants",
+        "Mighty_Lord_Cobra",
+        "__ADMINISTRATOR",
+        "lol",
+        "nitrogen",
+        "misery-overcoat",
+        "I am Groot",
+        "BATMAN",
+        "Zhang Weizhan",
+    ];
 
 pub enum UsersIdea {
     Singleplayer,
     JoinGame(String),
     HostGame,
+    ChangeName,
     ExitGame,
 }
 
@@ -68,12 +86,19 @@ pub fn input_ip_addr_port() -> String {
     }
 }
 
+/// random from default names
+pub fn random_name() -> String {
+    DEFAULT_NAMES.choose(&mut thread_rng()).unwrap().to_string()
+}
+
 /// show the menu, and returns the user's idea
-pub fn show_main_menu() -> Result<UsersIdea> {
+pub fn show_main_menu(name: &mut String) -> Result<UsersIdea> {
     stdout()
         .execute(Clear(ClearType::All))?
         .execute(cursor::MoveTo(0, 0))?
         .execute(Print(TITLE))?
+        .execute(Print(GREETING))?
+        .execute(Print(&format!("{}", &name)))?
         .execute(Print(MENU_HINT))?
         .execute(cursor::Show).unwrap();
     let mut line = String::new();
@@ -107,6 +132,13 @@ pub fn show_main_menu() -> Result<UsersIdea> {
             Ok(UsersIdea::HostGame)
         },
         4 => {
+            println!("Please enter your name:");
+            let mut line = String::new();
+            stdin().read_line(&mut line).unwrap();
+            *name = line.trim().to_string();
+            Ok(UsersIdea::ChangeName)
+        },
+        5 => {
             Ok(UsersIdea::ExitGame)
         },
         _ => Err(Error::new(ErrorKind::Other, "Choice out of range")),
