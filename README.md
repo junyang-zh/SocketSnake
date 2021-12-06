@@ -2,7 +2,7 @@
 
 Software laboratory for XJTU course computer network, then implemented multiplayer snake game, with Rust.
 
-![In Game Demo](/assets/in_game_demo.png)
+<img src="assets/in_game_demo.png" alt="In Game Demo" style="zoom:50%;" />
 
 ## How to play
 
