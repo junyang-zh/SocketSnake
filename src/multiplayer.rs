@@ -39,6 +39,7 @@ pub fn handle_connection(ctrl_tx: mpsc::Sender<YardCtrl>, mut stream: TcpStream)
     println!("Connected one client, establishing UDP connection");
     // send the multicast group for the client to join
     tcp_send(&mut stream, MULTICAST_GROUP_ADDR).unwrap();
+    println!("UDP Multicast address sent");
     thread::spawn(move || {
         loop {
             let op: YardCtrl = match tcp_recv!(stream) {
@@ -130,6 +131,8 @@ pub fn client_start(name: String, server_addr: String) {
     let socket = UdpSocket::bind(UDP_CLIENT_PORT).unwrap();
     socket.join_multicast_v4(&group_addr, &Ipv4Addr::UNSPECIFIED)
         .expect("Couldn't join multicast");
+
+    println!("Multicast set up, firing up game!");
 
     // UDP listening thread, use channel to notify an end of service
     let (listener_kill, listener_killed) = mpsc::channel::<bool>();
