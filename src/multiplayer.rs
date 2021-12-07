@@ -75,6 +75,9 @@ pub fn server_start(server_addr: String) -> std::io::Result<()> {
 
     // info from server (info_rx) always sent to UDP multicast
     let socket = UdpSocket::bind(UDP_SERVER_PORT).unwrap();
+    socket.join_multicast_v4(&MULTICAST_GROUP_ADDR, &Ipv4Addr::UNSPECIFIED)
+        .expect("Couldn't join multicast");
+    socket.set_multicast_loop_v4(false).expect("set_multicast_loop_v4 call failed");
     thread::spawn(move || {
         loop {
             let info = match info_rx.recv() {
