@@ -36,5 +36,6 @@ Transmitting control and display representations is dependent on [serde](https:/
  - ~~Solve issues that client have leaked threads~~
  - Pondering multiple cases when panicking can do harm to user friendliness
  - Improve the performace of the server
- - Check whether the server will left the dispatched workers and connections leaked
- - Improve UDP performace
+ - ~~Check whether the server will left the dispatched workers and connections leaked~~
+ - ~~Improve UDP performace~~
+ - refactor the threads quitting logic
