@@ -32,7 +32,11 @@ pub fn polling_keyboard(id: u64, ctrl_tx: Sender<YardCtrl>) {
                         KeyCode::Down | KeyCode::Char('s') => {
                             ctrl_tx.send(YardCtrl::CtrlSnake(id, Direction::D)).unwrap();
                         },
-                        KeyCode::Esc => { return; },
+                        KeyCode::Esc => {
+                            ctrl_tx.send(YardCtrl::QuitGame).unwrap_or(());
+                            // Err if singleplayer and backend already quitted
+                            return;
+                        },
                         _ => {},
                     };
                 },
@@ -90,7 +94,6 @@ pub fn start_and_play(
             },
             _ => {},
         }
-        println!("Log in failed, may due to congestion, please wait...");
     };
     let refresing_handle = thread::spawn(move || {
         polling_buf(id, ui, info_rx);

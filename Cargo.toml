@@ -12,5 +12,5 @@ crossterm = { version = "0.22.1", features = ["serde"] }
 rand = "*"
 # latest serde has some problems with enum Color 
 serde = { version = "1.0.118", features = ["derive"] }
-serde_yaml = "*"
+bincode = "*"
 local_ipaddress = "*"

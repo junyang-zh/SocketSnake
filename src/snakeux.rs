@@ -5,7 +5,7 @@ use crate::multiplayer;
 use std::io::{ stdin, stdout, Error, ErrorKind };
 use std::net::Ipv4Addr;
 
-use rand::{ thread_rng, Rng };
+use rand::{ thread_rng };
 use rand::prelude::SliceRandom;
 pub use crossterm::{
     ExecutableCommand, QueueableCommand, Result,

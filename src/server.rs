@@ -6,16 +6,19 @@ use crate::render::Color;
 
 use std::thread;
 use std::time::Duration;
-use std::sync::mpsc::{ Sender, Receiver, SendError, TryRecvError };
+use std::sync::mpsc::{ Sender, Receiver, TryRecvError };
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum YardCtrl {
-    // send a random client identifier and name for the server to shake hands
+    /// send a random client identifier and name for the server to shake hands
     NewSnake(u64, String),
     CtrlSnake(u64, Direction),
+    /// when in singleplayer, it is processed by backend, and it quits
+    /// when in multiplayer, it shall be intercepted avoiding backend quit
+    QuitGame,
 }
 
 pub type BoardType = Vec<(Color, String)>; // board can be rendered with color
@@ -70,6 +73,9 @@ pub fn start_and_serve(
                             continue;
                         },
                     }
+                },
+                Ok(YardCtrl::QuitGame) => {
+                    return;
                 },
                 Err(TryRecvError::Empty) => { break; },
                 Err(TryRecvError::Disconnected) => { return; },

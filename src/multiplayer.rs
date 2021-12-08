@@ -9,6 +9,7 @@ use crate::{ tcp_recv, udp_recv };
 use std::thread;
 use std::sync::mpsc::{ self, TryRecvError };
 use std::net::{ Shutdown, TcpListener, TcpStream, UdpSocket, Ipv4Addr };
+use std::time::Duration;
 
 pub const TCP_SERVER_PORT: &str = ":14514";
 pub const UDP_SERVER_PORT: &str = "0.0.0.0:19198";
@@ -43,6 +44,10 @@ pub fn handle_connection(ctrl_tx: mpsc::Sender<YardCtrl>, mut stream: TcpStream)
     thread::spawn(move || {
         loop {
             let op: YardCtrl = match tcp_recv!(stream) {
+                Ok(YardCtrl::QuitGame) => {
+                    println!("Quit game intercepted, releasing connection");
+                    break;
+                },
                 Ok(c) => { c },
                 Err(e) => {
                     println!("Receiving failed {}", e);
@@ -55,11 +60,11 @@ pub fn handle_connection(ctrl_tx: mpsc::Sender<YardCtrl>, mut stream: TcpStream)
                 },
                 Err(_) => {
                     println!("Server quitted, ending TCP connection");
-                    stream.shutdown(Shutdown::Both).expect("shutdown call failed");
                     break;
                 }
             };
         }
+        stream.shutdown(Shutdown::Both).expect("shutdown call failed");
     });
 }
 
@@ -103,6 +108,8 @@ pub fn server_start(server_addr: String) -> std::io::Result<()> {
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
+                    stream.set_read_timeout(Some(Duration::from_secs(100)))
+                        .expect("set_read_timeout call failed");
                     // spawn a child that sends ctrl to the backend
                     let ctrl_tx_clone = mpsc::Sender::clone(&ctrl_tx);
                     handle_connection(ctrl_tx_clone, stream);
